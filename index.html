@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Seguimiento en Vivo</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            background: #f5f5f5;
+        }
+
+        h2 {
+            margin-top: 10px;
+        }
+
+        #map {
+            height: 500px;
+            margin: 10px;
+            border-radius: 10px;
+        }
+
+        input, button {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 5px;
+            border: none;
+        }
+
+        button {
+            background: #007BFF;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+
+<body>
+
+<h2>📍 Seguimiento en Vivo de Usuarios</h2>
+
+<input type="text" id="nombre" placeholder="Ingresa tu nombre o ID">
+<br>
+
+<button onclick="iniciarSeguimiento()">🚀 Iniciar Seguimiento</button>
+
+<div id="map"></div>
+
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+// 🌍 Inicializar mapa (San Salvador por defecto)
+let map = L.map('map').setView([13.6929, -89.2182], 13);
+
+// Capa de mapa
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+}).addTo(map);
+
+// Variables globales
+let lat, lng;
+let markers = {};
+let seguimientoActivo = false;
+
+// 📍 Obtener ubicación del usuario
+function obtenerUbicacion() {
+    navigator.geolocation.getCurrentPosition(function(position) {
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+    });
+}
+
+// 📡 Enviar ubicación al servidor
+function enviarUbicacion() {
+    let nombre = document.getElementById("nombre").value;
+
+    if (!nombre || !lat || !lng) return;
+
+    fetch("TU_URL_APPS_SCRIPT", {
+        method: "POST",
+        body: JSON.stringify({
+            nombre: nombre,
+            lat: lat,
+            lng: lng
+        })
+    });
+}
+
+// 🌐 Cargar ubicaciones de TODOS los usuarios
+function cargarUbicaciones() {
+    fetch("https://script.google.com/macros/s/AKfycbw9F4eovwGaubybnFp-xoveHcI4JXfZLOuER_XZI0mTsazJX_QcXJn2azQpiIauM3wK/exec")
+    .then(res => res.json())
+    .then(data => {
+
+        for (let i = 1; i < data.length; i++) {
+
+            let fila = data[i];
+
+            let nombre = fila[1];
+            let latitud = parseFloat(fila[2]);
+            let longitud = parseFloat(fila[3]);
+
+            if (!latitud || !longitud) continue;
+
+            if (markers[nombre]) {
+                // 🔄 Actualizar posición existente
+                markers[nombre].setLatLng([latitud, longitud]);
+            } else {
+                // 🆕 Crear marcador nuevo
+                let marker = L.marker([latitud, longitud])
+                    .addTo(map)
+                    .bindPopup("👤 " + nombre);
+
+                markers[nombre] = marker;
+            }
+        }
+    });
+}
+
+// 🚀 Iniciar seguimiento en vivo
+function iniciarSeguimiento() {
+
+    let nombre = document.getElementById("nombre").value;
+
+    if (!nombre) {
+        alert("Por favor ingresa un nombre o ID");
+        return;
+    }
+
+    if (seguimientoActivo) return;
+
+    seguimientoActivo = true;
+
+    alert("Seguimiento iniciado");
+
+    // Obtener ubicación constantemente
+    setInterval(obtenerUbicacion, 3000);
+
+    // Enviar ubicación cada 5 segundos
+    setInterval(enviarUbicacion, 5000);
+
+    // Actualizar mapa cada 5 segundos
+    setInterval(cargarUbicaciones, 5000);
+}
+
+</script>
+
+</body>
+</html>
