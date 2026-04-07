@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>GPS en Vivo - Seguimiento</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; background: #f4f7f6; text-align: center; }
+        .control-panel { background: white; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: relative; z-index: 1000; }
+        #map { height: 75vh; width: 95%; margin: 15px auto; border-radius: 12px; border: 1px solid #ddd; background: #e0e0e0; }
+        input { padding: 12px; width: 250px; border: 1px solid #ddd; border-radius: 6px; outline: none; }
+        button { padding: 12px 25px; background: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        #status { margin-top: 10px; font-size: 0.9em; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="control-panel">
+    <h2>📍 Seguimiento en Tiempo Real</h2>
+    <input type="text" id="nombre" placeholder="Tu Nombre o ID de Unidad">
+    <button onclick="iniciarSistema()">Iniciar Rastreo</button>
+    <div id="status">El mapa se cargará al obtener señal GPS...</div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+// --- CONFIGURACIÓN ---
+// REEMPLAZA ESTO CON TU URL DE "EJECUTAR" (DEPLOYMENT)
+const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbw7mkULntsFH1j7f5ytwzEViuIummoyGFrsvh75VBWohXGb44as7PQOyaQg76VVXjms/exec"; 
+
+let map = L.map('map'); // Se crea sin setView (en blanco)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+let lat = null, lng = null;
+let markers = {};
+let centradoInicial = false;
+
+// 1. Activar GPS y mover el mapa solo cuando haya señal
+function activarGPS() {
+    if (!navigator.geolocation) return alert("Tu navegador no soporta GPS");
+    
+    document.getElementById("status").innerText = "Buscando satélites... mantente en un lugar abierto.";
+
+    navigator.geolocation.watchPosition(
+        (pos) => {
+            lat = pos.coords.latitude;
+            lng = pos.coords.longitude;
+            
+            // Si es la primera señal, centramos el mapa donde estás tú
+            if (!centradoInicial) {
+                map.setView([lat, lng], 16);
+                centradoInicial = true;
+                document.getElementById("status").innerText = "¡Ubicación encontrada y compartiendo!";
+            }
+        },
+        (err) => {
+            document.getElementById("status").innerText = "Error GPS: " + err.message;
+        },
+        { enableHighAccuracy: true, timeout: 15000 }
+    );
+}
+
+// 2. Enviar mi posición a la base de datos (POST)
+async function enviarPosicion() {
+    let nombre = document.getElementById("nombre").value;
+    if (!nombre || lat === null) return;
+
+    fetch(URL_APPS_SCRIPT, {
+        method: "POST",
+        mode: "no-cors", // Evita bloqueos de seguridad de Google
+        body: JSON.stringify({ nombre: nombre, lat: lat, lng: lng })
+    }).then(() => console.log("📍 Posición actualizada en la nube"));
+}
+
+// 3. Cargar las posiciones de todos en el mapa (GET)
+async function actualizarMapa() {
+    try {
+        const response = await fetch(URL_APPS_SCRIPT);
+        const data = await response.json();
+
+        // Saltamos i=0 porque son los encabezados de la hoja
+        for (let i = 1; i < data.length; i++) {
+            let nombreUsuario = data[i][1];
+            let uLat = parseFloat(data[i][2]);
+            let uLng = parseFloat(data[i][3]);
+
+            if (isNaN(uLat) || isNaN(uLng)) continue;
+
+            if (markers[nombreUsuario]) {
+                markers[nombreUsuario].setLatLng([uLat, uLng]);
+            } else {
+                markers[nombreUsuario] = L.marker([uLat, uLng]).addTo(map).bindPopup(nombreUsuario);
+            }
+        }
+    } catch (e) {
+        console.error("Error al refrescar el mapa:", e);
+    }
+}
+
+function iniciarSistema() {
+    let nombre = document.getElementById("nombre").value;
+    if (!nombre) return alert("Por favor, ingresa un nombre para identificarte.");
+
+    activarGPS();
+    
+    // Enviar mi posición cada 8 segundos
+    setInterval(enviarPosicion, 8000);
+    
+    // Actualizar el mapa con todos los usuarios cada 5 segundos
+    setInterval(actualizarMapa, 5000);
+    
+    document.getElementById("nombre").disabled = true;
+    alert("Sistema de rastreo iniciado correctamente.");
+}
+</script>
+
+</body>
+</html>
